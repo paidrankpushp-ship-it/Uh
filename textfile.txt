@@ -1,0 +1,122 @@
+-- AFKTY performance tweaks (auto-managed — toggle in the app)
+task.spawn(function()
+    if not game:IsLoaded() then game.Loaded:Wait() end
+    pcall(function() setthreadidentity(8) end)
+    local RunService = game:GetService("RunService")
+    local UGS = UserSettings():GetService("UserGameSettings")
+    pcall(function() if setfpscap then setfpscap(15) end end)
+    while true do
+        pcall(function() UGS.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1 end)
+        pcall(function() sethiddenproperty(UGS, "GraphicsQualityLevel", 1) end)
+        pcall(function() RunService:Set3dRenderingEnabled(false) end)
+        pcall(function() if setfpscap then setfpscap(15) end end)
+        task.wait(10)
+    end
+end)
+-- No lighting effects
+task.spawn(function() pcall(function()
+local Lighting = game:GetService("Lighting")
+local function disableEffect(v)
+    if v:IsA("PostProcessEffect") then v.Enabled = false end
+end
+Lighting.GlobalShadows = false
+Lighting.ChildAdded:Connect(disableEffect)
+for _, v in ipairs(Lighting:GetChildren()) do disableEffect(v) end
+end) end)
+-- Low mesh detail + no streaming
+task.spawn(function() pcall(function()
+settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level00
+workspace.StreamingEnabled = false
+workspace:GetPropertyChangedSignal("StreamingEnabled"):Connect(function()
+    workspace.StreamingEnabled = false
+end)
+end) end)
+-- Lighten camera
+task.spawn(function() pcall(function()
+local player = game:GetService("Players").LocalPlayer
+player.DevTouchCameraMode = Enum.DevTouchCameraMovementMode.Classic
+local camera = workspace.CurrentCamera
+if camera then camera.FieldOfView = 120 end
+end) end)
+-- Strip map detail
+task.spawn(function() pcall(function()
+task.wait(30)
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local terrain = Workspace:FindFirstChildOfClass("Terrain")
+if terrain then
+    terrain.WaterWaveSize = 0
+    terrain.WaterWaveSpeed = 0
+    terrain.WaterReflectance = 0
+    terrain.WaterTransparency = 0.4
+end
+-- True when obj belongs to a model that has a Humanoid (an NPC / mob / character).
+-- Those are left fully intact — stripping them invisible/deleting their decals made
+-- NPCs disappear, which broke games whose scripts target them.
+local function inCreature(obj)
+    local p = obj.Parent
+    while p and p ~= Workspace do
+        if p:IsA("Model") and p:FindFirstChildOfClass("Humanoid") then return true end
+        p = p.Parent
+    end
+    return false
+end
+local function optimize(obj)
+    if inCreature(obj) then return end
+    if obj:IsA("Highlight") then
+        obj.Enabled = false
+    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam")
+        or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+        obj.Enabled = false
+    elseif obj:IsA("Decal") then
+        obj:Destroy()
+    elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+        obj.ImageTransparency = 1
+    elseif obj:IsA("SurfaceAppearance") then
+        obj.ColorMap = ""; obj.MetalnessMap = ""; obj.NormalMap = ""; obj.RoughnessMap = ""
+    elseif obj:IsA("MeshPart") then
+        obj.TextureID = ""; obj.Transparency = 1; obj.LocalTransparencyModifier = 1
+    elseif obj:IsA("SpecialMesh") then
+        obj.TextureId = ""
+    elseif obj:IsA("BasePart") then
+        local c = obj.Color
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.Reflectance = 0
+        obj.CastShadow = false
+        obj.Color = Color3.fromRGB(
+            math.floor(c.R * 255 / 32) * 32,
+            math.floor(c.G * 255 / 32) * 32,
+            math.floor(c.B * 255 / 32) * 32)
+        obj.LocalTransparencyModifier = 1
+    elseif obj:IsA("Sound") then
+        obj.Volume = 0
+    end
+end
+for _, v in ipairs(Workspace:GetDescendants()) do optimize(v) end
+Workspace.DescendantAdded:Connect(optimize)
+local function optimizeCharacter(char)
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+            v.CastShadow = false
+            v.LocalTransparencyModifier = 1
+        elseif v:IsA("Accessory") or v:IsA("Clothing") or v:IsA("ShirtGraphic")
+            or v:IsA("Decal") then
+            v:Destroy()
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam")
+            or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+            v.Enabled = false
+        end
+    end
+end
+local function setupPlayer(plr)
+    plr.CharacterAdded:Connect(function(char)
+        task.wait(1)
+        optimizeCharacter(char)
+    end)
+    if plr.Character then optimizeCharacter(plr.Character) end
+end
+for _, plr in ipairs(Players:GetPlayers()) do setupPlayer(plr) end
+Players.PlayerAdded:Connect(setupPlayer)
+end) end)
